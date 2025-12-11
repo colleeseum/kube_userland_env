@@ -115,16 +115,33 @@ if ! type k9s &> /dev/null; then
     # Convert your existing OS (linux/darwin/windows) → Linux/Darwin/Windows
     K9S_OS="$(printf '%s' "$OS" | sed 's/.*/\u&/')"
 
-    TARBALL="k9s_${K9S_OS}_${ARCH}.tar.gz"
-    URL="https://github.com/derailed/k9s/releases/download/${K9S_VERSION}/${TARBALL}"
+    if [[ "$OS" == "windows" ]]; then
+        K9S_ARCHIVE_EXT="zip"
+    else
+        K9S_ARCHIVE_EXT="tar.gz"
+    fi
+
+    ARCHIVE="k9s_${K9S_OS}_${ARCH}.${K9S_ARCHIVE_EXT}"
+    URL="https://github.com/derailed/k9s/releases/download/${K9S_VERSION}/${ARCHIVE}"
 
     echo "Downloading k9s from: $URL"
 
     mkdir -p "$HOME/bin"
-    cd /tmp
+    TMPDIR=$(mktemp -d)
+    cd "$TMPDIR"
 
-    curl -fsSL -o "$TARBALL" "$URL" || { echo "Download failed"; cd "$CWD"; exit 1; }
-    tar -xzf "$TARBALL" || { echo "Extract failed"; cd "$CWD"; exit 1; }
+    if ! curl -fsSL -o "$ARCHIVE" "$URL"; then
+        echo "Download failed"
+        cd "$CWD"
+        rm -rf "$TMPDIR"
+        exit 1
+    fi
+
+    if [[ "$K9S_ARCHIVE_EXT" == "zip" ]]; then
+        unzip -qo "$ARCHIVE" || { echo "Extract failed"; cd "$CWD"; rm -rf "$TMPDIR"; exit 1; }
+    else
+        tar -xzf "$ARCHIVE" || { echo "Extract failed"; cd "$CWD"; rm -rf "$TMPDIR"; exit 1; }
+    fi
 
     # k9s or k9s.exe depending on OS
     SRC_BIN="k9s"
@@ -134,6 +151,7 @@ if ! type k9s &> /dev/null; then
     chmod +x "$HOME/bin/k9s${EXT}"
 
     cd "$CWD"
+    rm -rf "$TMPDIR"
 
     echo "k9s installed at $HOME/bin/k9s${EXT}"
 fi
@@ -334,4 +352,3 @@ else
 		exec zsh
 	fi
 fi
-
