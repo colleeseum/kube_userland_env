@@ -359,8 +359,10 @@ if ! type zsh  &> /dev/null; then
 			ln -sf $CWD/tmux.conf ~/.tmux.conf
 		fi
 		ln -sf $CWD/kubectl.bash ~/.kubectl.bash
+		ln -sf $CWD/terraform.alias ~/.terraform.alias
 
 		echo 'source ~/.kubectl.bash' >> ~/.bashrc
+		echo 'source ~/.terraform.alias' >> ~/.bashrc
 		echo 'source ~/.start_tmux' >> ~/.bashrc
 		exec bash 
 	fi
