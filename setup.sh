@@ -64,6 +64,77 @@ else
     exit 1
 fi
 
+install_tmux_userland() {
+	if type tmux &> /dev/null; then
+		echo "tmux already installed, skipping download."
+		return 0
+	fi
+
+	echo "tmux not detected. Attempting a userland install..."
+
+	if [[ "$OS" == "linux" ]]; then
+		if [[ "$ARCH" != "amd64" ]]; then
+			echo "Automatic tmux install currently supports linux/amd64 only."
+			return 1
+		fi
+
+		local release_json url version tmpfile
+		if ! release_json=$(curl -fsSL https://api.github.com/repos/nelsonenzo/tmux-appimage/releases/latest); then
+			echo "Unable to query the tmux AppImage release feed."
+			return 1
+		fi
+
+		url=$(printf '%s\n' "$release_json" | grep 'browser_download_url' | head -n1 | cut -d'"' -f4)
+		version=$(printf '%s\n' "$release_json" | grep '"tag_name"' | head -n1 | cut -d'"' -f4)
+
+		if [ -z "$url" ]; then
+			echo "Unable to determine the tmux download URL."
+			return 1
+		fi
+
+		tmpfile=$(mktemp)
+		if ! curl -fsSL -o "$tmpfile" "$url"; then
+			echo "Failed to download tmux AppImage from $url"
+			rm -f "$tmpfile"
+			return 1
+		fi
+
+		mv "$tmpfile" "$HOME/bin/tmux"
+		chmod +x "$HOME/bin/tmux"
+		echo "tmux ${version:-AppImage} installed at $HOME/bin/tmux"
+		return 0
+
+	elif [[ "$OS" == "darwin" ]]; then
+		if ! type brew &> /dev/null; then
+			echo "Homebrew not found; unable to install tmux automatically on macOS."
+			return 1
+		fi
+
+		if ! brew list tmux >/dev/null 2>&1; then
+			if ! brew install tmux; then
+				echo "brew install tmux failed."
+				return 1
+			fi
+		else
+			echo "tmux already managed by Homebrew."
+		fi
+
+		local brew_tmux
+		brew_tmux="$(brew --prefix)/bin/tmux"
+		if [ -x "$brew_tmux" ]; then
+			ln -sf "$brew_tmux" "$HOME/bin/tmux"
+			echo "tmux symlinked to $HOME/bin/tmux"
+			return 0
+		fi
+
+		echo "Homebrew installed tmux but expected binary was not found."
+		return 1
+	else
+		echo "Automatic tmux installation is not supported on OS: $OS"
+		return 1
+	fi
+}
+
 if ! type kubectl &> /dev/null; then
 	# Get latest stable version
 	KUBECTL_VERSION=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
@@ -255,6 +326,10 @@ if ! type terraform &> /dev/null; then
     rm -rf "$TMPDIR"
 
     echo "Terraform installed at $HOME/bin/terraform${EXT}"
+fi
+
+if ! install_tmux_userland; then
+	echo "Continuing without installing tmux automatically."
 fi
 
 if ! type zsh  &> /dev/null; then
