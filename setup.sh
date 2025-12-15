@@ -135,6 +135,74 @@ install_tmux_userland() {
 	fi
 }
 
+install_jq_userland() {
+	if type jq &> /dev/null; then
+		return 0
+	fi
+
+	echo "jq not detected. Attempting a userland install..."
+
+	local release_json version asset url tmpfile target
+
+	if ! release_json=$(curl -fsSL https://api.github.com/repos/jqlang/jq/releases/latest); then
+		echo "Unable to fetch jq release metadata."
+		return 1
+	fi
+
+	version=$(printf '%s\n' "$release_json" | grep '"tag_name"' | head -n1 | cut -d'"' -f4)
+	if [ -z "$version" ]; then
+		echo "Unable to determine jq release version."
+		return 1
+	fi
+
+	case "$OS" in
+		linux)
+			if [ "$ARCH" = "amd64" ]; then
+				asset="jq-linux-amd64"
+			elif [ "$ARCH" = "arm64" ]; then
+				asset="jq-linux-arm64"
+			fi
+			;;
+		darwin)
+			if [ "$ARCH" = "amd64" ]; then
+				asset="jq-macos-amd64"
+			elif [ "$ARCH" = "arm64" ]; then
+				asset="jq-macos-arm64"
+			fi
+			;;
+		windows)
+			if [ "$ARCH" = "amd64" ]; then
+				asset="jq-windows-amd64.exe"
+			fi
+			;;
+	esac
+
+	if [ -z "$asset" ]; then
+		echo "Automatic jq installation is not supported on ${OS}/${ARCH}. Please install jq manually."
+		return 1
+	fi
+
+	url="https://github.com/jqlang/jq/releases/download/${version}/${asset}"
+	tmpfile=$(mktemp)
+
+	if ! curl -fsSL -o "$tmpfile" "$url"; then
+		echo "Failed to download jq from $url"
+		rm -f "$tmpfile"
+		return 1
+	fi
+
+	mkdir -p "$HOME/bin"
+	target="$HOME/bin/jq"
+	if [ "$OS" = "windows" ]; then
+		target="$HOME/bin/jq.exe"
+	fi
+
+	mv "$tmpfile" "$target"
+	chmod +x "$target"
+	echo "jq installed at $target"
+	return 0
+}
+
 if ! type kubectl &> /dev/null; then
 	# Get latest stable version
 	KUBECTL_VERSION=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
@@ -230,14 +298,26 @@ fi
 
 
 if ! type helm &> /dev/null; then
+	if ! type jq &> /dev/null; then
+		if ! install_jq_userland; then
+			echo "jq is required to determine the latest Helm version. Aborting."
+			exit 1
+		fi
+	fi
+
 	cd /tmp
 
 
 	# --- Get latest Helm version ---
 	HELM_VERSION=$(
-	    curl -s https://api.github.com/repos/helm/helm/releases/latest \
-	    | grep '"tag_name"' | head -n1 | cut -d'"' -f4
+	    curl -s https://api.github.com/repos/helm/helm/releases \
+	    | jq -r '[.[] | select(.prerelease == false)][0].tag_name'
 	)
+
+	if [ -z "$HELM_VERSION" ]; then
+		echo "Unable to determine the latest Helm version from GitHub."
+		exit 1
+	fi
 
 
 	# --- Install directory ---
