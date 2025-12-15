@@ -311,7 +311,7 @@ if ! type helm &> /dev/null; then
 	# --- Get latest Helm version ---
 	HELM_VERSION=$(
 	    curl -s https://api.github.com/repos/helm/helm/releases \
-	    | jq -r '[.[] | select(.prerelease == false)][0].tag_name'
+	    | jq -r '[.[] | select(.prerelease == false and (.tag_name | test("^v3\\.")))][0].tag_name'
 	)
 
 	if [ -z "$HELM_VERSION" ]; then
